@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -185,12 +185,28 @@ function ScannerPage({ onMemberAdded }) {
   };
 
   const handleSubmit = async () => {
-    setSubmitting(true);
-    await new Promise(r => setTimeout(r, 800));
-    onMemberAdded(fields);
-    setSubmitting(false);
-    setStep("success");
-  };
+  setSubmitting(true);
+  const today = new Date();
+  const month = today.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  const sheetsUrl = import.meta.env.VITE_SHEETS_URL;
+  try {
+    await fetch(sheetsUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...fields,
+        meetingDate: today.toLocaleDateString("en-IN"),
+        month,
+        addedAt: today.toISOString(),
+      })
+    });
+  } catch(err) {
+    console.log("Sheets error:", err);
+  }
+  onMemberAdded({ ...fields, month, meetingDate: today.toISOString().split("T")[0] });
+  setSubmitting(false);
+  setStep("success");
+};
 
   const reset = () => { setStep("upload"); setImage(null); setFields({}); setError(""); };
 
@@ -428,6 +444,31 @@ function AdminPage({ members }) {
 function App() {
   const [tab, setTab] = useState("scan");
   const [members, setMembers] = useState([]);
+const [loading, setLoading] = useState(true);
+
+useEffect(() => {
+  const sheetsUrl = import.meta.env.VITE_SHEETS_URL;
+  if (!sheetsUrl) { setLoading(false); return; }
+  fetch(`${sheetsUrl}?action=get`)
+    .then(r => r.json())
+    .then(result => {
+      const data = (result.data || []).map((m, i) => ({
+        id: i,
+        name: m.name || "",
+        business: m.business || "",
+        role: m.role || "",
+        phone: m.phone || "",
+        email: m.email || "",
+        website: m.website || "",
+        address: m.address || "",
+        meetingDate: m.meeting_date || "",
+        month: m.month || "",
+      }));
+      setMembers(data);
+    })
+    .catch(() => {})
+    .finally(() => setLoading(false));
+}, []);
 
   const addMember = (fields) => {
     const today = new Date();
